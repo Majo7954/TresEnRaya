@@ -16,19 +16,32 @@ def main():
     print("Juega como 'X' y la IA jugará como 'O'")
     print("Elige una posición para jugar usando coordenadas (fila, columna) desde 1 hasta", h, "para fila y", v, "para columna.")
     print(tablero.juegoActual)
-    while tablero.juegoActual.movidas:
+    
+    while True:
+        # --- Turno de la IA ---
         tablero.percibir(agente_ia)
-        # Jugada de la IA
         print("Es el turno de la IA:")
-        # Aquí es donde llamamos a la IA para que tome su decisión
-        agente_ia.programa()  # Aquí se calcula la mejor jugada
-        movimiento_ia = agente_ia.acciones  # Suponiendo que este atributo tiene la mejor jugada
-
-        print(movimiento_ia)
-        # Actualizar el estado del juego con la jugada de la IA
+        agente_ia.programa()
+        movimiento_ia = agente_ia.acciones
+        print(f"La IA juega en: {movimiento_ia}")
+        
+        # Actualizar y mostrar tablero después de IA
         tablero.juegoActual = agente_ia.getResultado(tablero.juegoActual, movimiento_ia)
         agente_ia.mostrar(tablero.juegoActual)
-        # Tu turno
+        
+        # Verificar si la IA ganó o hay empate
+        if agente_ia.testTerminal(tablero.juegoActual):
+            utilidad = agente_ia.computa_utilidad(tablero.juegoActual.tablero, movimiento_ia, 'X') # Asumiendo IA es X
+            # O simplemente comprobar utilidad del estado si ya está calculada
+            # Nota: getResultado calcula la utilidad y la guarda en el estado
+            if tablero.juegoActual.get_utilidad != 0:
+                print("¡La IA ha ganado!")
+            else:
+                print("¡Es un empate!")
+            break
+
+        # --- Turno del Jugador ---
+        print("Tu turno (Juegas como 'O'):")
         while True:
             try:
                 x = int(input("Introduce la fila (1-{}): ".format(h)))
@@ -40,24 +53,14 @@ def main():
             except ValueError:
                 print("Por favor, introduce números válidos.")
 
-        # Actualizar el estado del juego con tu jugada
-        print(tablero.juegoActual)
+        # Actualizar y mostrar tablero después del Jugador
         tablero.juegoActual = agente_ia.getResultado(tablero.juegoActual, (x, y))
         agente_ia.mostrar(tablero.juegoActual)
 
-        # Verificar si hay un ganador
+        # Verificar si el Jugador ganó o hay empate
         if agente_ia.testTerminal(tablero.juegoActual):
             if tablero.juegoActual.get_utilidad != 0:
                 print("¡Felicidades! Has ganado.")
-            else:
-                print("¡Es un empate!")
-            break
-
-
-        # Mostrar el tablero después de la jugada de la IA
-        if agente_ia.testTerminal(tablero.juegoActual):
-            if tablero.juegoActual.get_utilidad != 0:
-                print("La IA ha ganado.")
             else:
                 print("¡Es un empate!")
             break

@@ -65,7 +65,8 @@ class AgenteNEnRaya(AgenteJugador):
     
  
     def programa(self):
-        self.acciones = self.podaAlphaBetaFunEval(self.estado)
+        # Usamos podaAlphaBeta en lugar de podaAlphaBetaFunEval para explorar todo el árbol de juego (perfecto para 3x3)
+        self.acciones = self.podaAlphaBeta(self.estado)
 
 
     '''
