@@ -1,0 +1,12 @@
+# Carpetas de caché
+__pycache__/
+
+# Archivos compilados de Python
+*.pyc
+*.pyo
+*.pyd
+
+# Entornos virtuales
+venv/
+env/
+.venv/
