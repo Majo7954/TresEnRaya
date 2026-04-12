@@ -1,39 +1,46 @@
 """
 Main para Othello
-Permite: jugar contra la IA, enfrentar IA vs IA, y ejecutar el algoritmo genético
+Permite: jugar contra la IA, enfrentar IA vs IA, y ejecutar el algoritmo genético.
+Usa OthelloAgente que hereda de AgenteJugador.
 """
 
-import random
+import os
 from Othello import Othello, OthelloAgente, OthelloEvaluacion, OthelloGenetico
 
+ARCHIVO_PESOS = 'mejores_pesos_othello.json'
+
+
+# ============================================================================
+# MODO 1: Humano vs IA
+# ============================================================================
 
 def jugar_contra_ia():
-    """Juego: Humano (blancas) vs IA (negras)"""
     juego = Othello()
     profundidad = 3
-    pesos = OthelloEvaluacion.PESOS_DEFECTO
-    
+
     print("=" * 50)
-    print("OTHELLO - Humano vs IA")
+    print("OTHELLO — Humano vs IA")
     print("Tú juegas con BLANCAS (B), la IA juega con NEGRAS (N)")
-    print("Formato de jugada: fila columna (ej: 2 3)")
+    print("Formato de jugada: fila columna  (ej: 2 3)")
     print("=" * 50)
-    
-    # Preguntar si quiere usar pesos optimizados
-    usar_opt = input("¿Usar pesos optimizados? (s/n): ").lower() == 's'
-    if usar_opt:
-        # Pesos optimizados (ejemplo, puedes cambiarlos después de ejecutar el AG)
-        pesos_opt = [1.2, 0.8, 1.5, 0.4]
-        pesos = pesos_opt
-        print(f"Usando pesos optimizados: {pesos_opt}")
-    
+
+    # Intentar cargar pesos optimizados si existen
+    pesos = OthelloEvaluacion.PESOS_DEFECTO
+    if os.path.exists(ARCHIVO_PESOS):
+        usar_opt = input("Se encontraron pesos optimizados. ¿Usarlos? (s/n): ").lower() == 's'
+        if usar_opt:
+            ag_tmp = OthelloGenetico()
+            pesos = ag_tmp.cargar_pesos(ARCHIVO_PESOS)
+    else:
+        print("(No se encontraron pesos optimizados, usando pesos manuales)")
+
+    # Crear agente usando la nueva arquitectura
     agente_ia = OthelloAgente(profundidad=profundidad, pesos=pesos, jugador='N')
-    
+
     while not juego.es_terminal():
         juego.mostrar()
-        
+
         if juego.jugador_actual == 'N':
-            # Turno de la IA
             print("\n🤖 IA pensando...")
             mov = agente_ia.seleccionar_movimiento(juego)
             if mov:
@@ -43,16 +50,15 @@ def jugar_contra_ia():
                 print("IA no tiene movimientos, pasa turno")
                 juego.jugador_actual = 'B'
         else:
-            # Turno del humano
             print("\n👤 Tu turno (Blancas)")
             movimientos = juego.obtener_movimientos_legales('B')
             print(f"Movimientos legales: {movimientos}")
-            
+
             if not movimientos:
                 print("No tienes movimientos, pasas turno")
                 juego.jugador_actual = 'N'
                 continue
-            
+
             while True:
                 try:
                     entrada = input("Ingresa fila y columna (0-7): ")
@@ -61,15 +67,164 @@ def jugar_contra_ia():
                         juego.aplicar_movimiento(f, c, 'B')
                         break
                     else:
-                        print(f"Movimiento inválido. Movimientos legales: {movimientos}")
-                except:
-                    print("Entrada inválida. Usa formato: fila columna (ej: 2 3)")
-    
-    # Fin del juego
+                        print(f"Movimiento inválido. Legales: {movimientos}")
+                except Exception:
+                    print("Entrada inválida. Usa formato: fila columna  (ej: 2 3)")
+
+    _mostrar_resultado(juego)
+
+
+# ============================================================================
+# MODO 2: IA vs IA
+# ============================================================================
+
+def enfrentar_ia_vs_ia(partidas=10, profundidad=3):
+    print(f"\n{'='*50}")
+    print(f"IA vs IA — {partidas} partidas (profundidad={profundidad})")
+    print(f"{'='*50}")
+
+    pesos_mejorados = OthelloEvaluacion.PESOS_DEFECTO
+    if os.path.exists(ARCHIVO_PESOS):
+        ag_tmp = OthelloGenetico()
+        pesos_mejorados = ag_tmp.cargar_pesos(ARCHIVO_PESOS)
+        print("Agente optimizado usa pesos del AG.")
+    else:
+        print("No se encontraron pesos optimizados. Ambos agentes usarán pesos manuales.")
+
+    victorias_manual   = 0
+    victorias_mejorado = 0
+    empates            = 0
+
+    for i in range(partidas):
+        juego = Othello()
+
+        # Alternar colores para evitar sesgo
+        if i % 2 == 0:
+            agente_manual   = OthelloAgente(profundidad=profundidad,
+                                            pesos=OthelloEvaluacion.PESOS_DEFECTO, jugador='N')
+            agente_mejorado = OthelloAgente(profundidad=profundidad,
+                                            pesos=pesos_mejorados, jugador='B')
+        else:
+            agente_manual   = OthelloAgente(profundidad=profundidad,
+                                            pesos=OthelloEvaluacion.PESOS_DEFECTO, jugador='B')
+            agente_mejorado = OthelloAgente(profundidad=profundidad,
+                                            pesos=pesos_mejorados, jugador='N')
+
+        while not juego.es_terminal():
+            jugador_actual = juego.jugador_actual
+            agente = agente_manual if jugador_actual == agente_manual.jugador else agente_mejorado
+            mov = agente.seleccionar_movimiento(juego)
+            if mov:
+                juego.aplicar_movimiento(mov[0], mov[1])
+            else:
+                juego.jugador_actual = 'B' if juego.jugador_actual == 'N' else 'N'
+
+        resultado = juego.obtener_resultado()
+
+        gano_manual = (
+            (resultado == 1  and agente_manual.jugador == 'N') or
+            (resultado == -1 and agente_manual.jugador == 'B')
+        )
+        if resultado == 0:
+            empates += 1
+        elif gano_manual:
+            victorias_manual += 1
+        else:
+            victorias_mejorado += 1
+
+        if (i + 1) % 5 == 0:
+            print(f"  Partidas jugadas: {i+1}/{partidas}")
+
+    print(f"\n📊 Resultados finales:")
+    print(f"  Victorias agente manual   : {victorias_manual}")
+    print(f"  Victorias agente mejorado : {victorias_mejorado}")
+    print(f"  Empates                   : {empates}")
+    print(f"  Tasa victoria manual      : {victorias_manual/partidas:.2%}")
+    print(f"  Tasa victoria mejorado    : {victorias_mejorado/partidas:.2%}")
+
+
+# ============================================================================
+# MODO 3: Algoritmo Genético
+# ============================================================================
+
+def ejecutar_algoritmo_genetico():
+    print("=" * 50)
+    print("ALGORITMO GENÉTICO — optimizar pesos de Othello")
+    print("=" * 50)
+
+    tam_poblacion      = 20
+    generaciones       = 15
+    profundidad        = 2
+    partidas_por_fitness = 10
+
+    print(f"\nParámetros:")
+    print(f"  Población           : {tam_poblacion}")
+    print(f"  Generaciones        : {generaciones}")
+    print(f"  Profundidad Minimax : {profundidad}")
+    print(f"  Partidas/fitness    : {partidas_por_fitness}")
+    input("\nPresiona Enter para comenzar...")
+
+    ag = OthelloGenetico(
+        tam_poblacion=tam_poblacion,
+        generaciones=generaciones,
+        profundidad=profundidad,
+        partidas_por_fitness=partidas_por_fitness
+    )
+
+    mejores_pesos, historial_mejor, historial_promedio = ag.evolucionar(verbose=True)
+
+    # Guardar pesos (Fase 3 - rúbrica)
+    ag.guardar_pesos(mejores_pesos, ARCHIVO_PESOS)
+
+    # Graficar convergencia (Fase 3 - rúbrica)
+    ag.graficar_convergencia('convergencia_othello.png')
+
+    # Prueba final
+    print("\n🧪 Prueba final: pesos AG vs pesos manuales (20 partidas)...")
+    victorias = 0
+    partidas_test = 20
+
+    for i in range(partidas_test):
+        juego = Othello()
+        if i % 2 == 0:
+            agente_opt    = OthelloAgente(profundidad=3, pesos=mejores_pesos, jugador='N')
+            agente_manual = OthelloAgente(profundidad=3,
+                                          pesos=OthelloEvaluacion.PESOS_DEFECTO, jugador='B')
+        else:
+            agente_opt    = OthelloAgente(profundidad=3, pesos=mejores_pesos, jugador='B')
+            agente_manual = OthelloAgente(profundidad=3,
+                                          pesos=OthelloEvaluacion.PESOS_DEFECTO, jugador='N')
+
+        while not juego.es_terminal():
+            jugador_actual = juego.jugador_actual
+            agente = agente_opt if jugador_actual == agente_opt.jugador else agente_manual
+            mov = agente.seleccionar_movimiento(juego)
+            if mov:
+                juego.aplicar_movimiento(mov[0], mov[1])
+            else:
+                juego.jugador_actual = 'B' if juego.jugador_actual == 'N' else 'N'
+
+        resultado = juego.obtener_resultado()
+        gano_opt = (
+            (resultado == 1  and agente_opt.jugador == 'N') or
+            (resultado == -1 and agente_opt.jugador == 'B')
+        )
+        if gano_opt:
+            victorias += 1
+
+    print(f"  Agente optimizado: {victorias}/{partidas_test} victorias ({victorias/partidas_test:.0%})")
+
+    return mejores_pesos
+
+
+# ============================================================================
+# UTILIDADES
+# ============================================================================
+
+def _mostrar_resultado(juego: Othello):
     juego.mostrar()
     negras, blancas = juego.contar_fichas()
-    print(f"\n📊 Resultado final: Negras (IA): {negras} | Blancas (Tú): {blancas}")
-    
+    print(f"\n📊 Resultado final — Negras (IA): {negras} | Blancas (Tú): {blancas}")
     resultado = juego.obtener_resultado()
     if resultado == 1:
         print("🏆 ¡Gana la IA (Negras)!")
@@ -79,149 +234,26 @@ def jugar_contra_ia():
         print("🤝 Empate")
 
 
-def enfrentar_ia_vs_ia(partidas=10, profundidad=3):
-    """Enfrenta dos agentes IA entre sí"""
-    print(f"\n{'='*50}")
-    print(f"IA vs IA - {partidas} partidas (profundidad={profundidad})")
-    print(f"{'='*50}")
-    
-    # Agente con pesos manuales
-    agente_manual = OthelloAgente(profundidad=profundidad, pesos=OthelloEvaluacion.PESOS_DEFECTO, jugador='N')
-    
-    # Agente con pesos mejorados (puedes cambiarlos después de ejecutar AG)
-    pesos_mejorados = [1.2, 0.8, 1.5, 0.4]  # Ejemplo
-    agente_mejorado = OthelloAgente(profundidad=profundidad, pesos=pesos_mejorados, jugador='B')
-    
-    victorias_manual = 0
-    victorias_mejorado = 0
-    empates = 0
-    
-    for i in range(partidas):
-        juego = Othello()
-        
-        # Alternar quién empieza
-        if i % 2 == 0:
-            agente_manual.jugador = 'N'
-            agente_mejorado.jugador = 'B'
-        else:
-            agente_manual.jugador = 'B'
-            agente_mejorado.jugador = 'N'
-        
-        while not juego.es_terminal():
-            jugador_actual = juego.jugador_actual
-            
-            if jugador_actual == agente_manual.jugador:
-                mov = agente_manual.seleccionar_movimiento(juego)
-            else:
-                mov = agente_mejorado.seleccionar_movimiento(juego)
-            
-            if mov:
-                juego.aplicar_movimiento(mov[0], mov[1])
-            else:
-                # Pasar turno
-                juego.jugador_actual = 'B' if juego.jugador_actual == 'N' else 'N'
-        
-        resultado = juego.obtener_resultado()
-        
-        # Determinar quién ganó (desde perspectiva de agente_manual)
-        if (resultado == 1 and agente_manual.jugador == 'N') or (resultado == -1 and agente_manual.jugador == 'B'):
-            victorias_manual += 1
-        elif resultado == 0:
-            empates += 1
-        else:
-            victorias_mejorado += 1
-        
-        if (i + 1) % 10 == 0:
-            print(f"Partidas jugadas: {i+1}")
-    
-    print(f"\n📊 Resultados finales:")
-    print(f"  Victorias agente manual: {victorias_manual}")
-    print(f"  Victorias agente mejorado: {victorias_mejorado}")
-    print(f"  Empates: {empates}")
-    print(f"  Tasa de victoria manual: {victorias_manual/partidas:.2%}")
-
-
-def ejecutar_algoritmo_genetico():
-    """Ejecuta el algoritmo genético para optimizar los pesos"""
-    print("=" * 50)
-    print("ALGORITMO GENÉTICO para optimizar pesos de Othello")
-    print("=" * 50)
-    
-    # Parámetros del AG
-    tam_poblacion = 20      # Tamaño de la población
-    generaciones = 15       # Número de generaciones
-    profundidad = 2         # Profundidad de búsqueda (menor para que sea más rápido)
-    partidas_por_fitness = 10  # Partidas por evaluación de fitness
-    
-    print(f"\nParámetros:")
-    print(f"  Población: {tam_poblacion}")
-    print(f"  Generaciones: {generaciones}")
-    print(f"  Profundidad Minimax: {profundidad}")
-    print(f"  Partidas por fitness: {partidas_por_fitness}")
-    print()
-    
-    input("Presiona Enter para comenzar...")
-    
-    ag = OthelloGenetico(
-        tam_poblacion=tam_poblacion,
-        generaciones=generaciones,
-        profundidad=profundidad,
-        partidas_por_fitness=partidas_por_fitness
-    )
-    
-    mejores_pesos, historial_mejor, historial_promedio = ag.evolucionar(verbose=True)
-    
-    print("\n" + "=" * 50)
-    print("RESULTADOS DEL ALGORITMO GENÉTICO")
-    print("=" * 50)
-    print(f"Mejores pesos encontrados: {[round(w, 2) for w in mejores_pesos]}")
-    
-    # Prueba final con los mejores pesos
-    print("\n🧪 Prueba final con mejores pesos vs pesos manuales...")
-    agente_opt = OthelloAgente(profundidad=3, pesos=mejores_pesos, jugador='N')
-    agente_manual = OthelloAgente(profundidad=3, pesos=OthelloEvaluacion.PESOS_DEFECTO, jugador='B')
-    
-    victorias = 0
-    partidas_test = 20
-    for _ in range(partidas_test):
-        juego = Othello()
-        while not juego.es_terminal():
-            if juego.jugador_actual == agente_opt.jugador:
-                mov = agente_opt.seleccionar_movimiento(juego)
-            else:
-                mov = agente_manual.seleccionar_movimiento(juego)
-            
-            if mov:
-                juego.aplicar_movimiento(mov[0], mov[1])
-            else:
-                juego.jugador_actual = 'B' if juego.jugador_actual == 'N' else 'N'
-        
-        resultado = juego.obtener_resultado()
-        if (resultado == 1 and agente_opt.jugador == 'N') or (resultado == -1 and agente_opt.jugador == 'B'):
-            victorias += 1
-    
-    print(f"  Agente optimizado ganó {victorias}/{partidas_test} partidas ({victorias/partidas_test:.0%}) contra agente manual")
-    
-    return mejores_pesos
-
+# ============================================================================
+# MENÚ PRINCIPAL
+# ============================================================================
 
 def menu():
-    """Menú principal"""
     print("\n" + "=" * 50)
-    print("          OTHELLO - MENÚ PRINCIPAL")
+    print("          OTHELLO — MENÚ PRINCIPAL")
     print("=" * 50)
     print("1. Jugar contra la IA")
     print("2. Enfrentar IA vs IA")
     print("3. Ejecutar Algoritmo Genético (optimizar pesos)")
     print("4. Salir")
     print("=" * 50)
-    
+
     opcion = input("Selecciona una opción: ")
-    
+
     if opcion == '1':
         jugar_contra_ia()
     elif opcion == '2':
-        partidas = int(input("Número de partidas (default 10): ") or "10")
+        partidas   = int(input("Número de partidas (default 10): ") or "10")
         profundidad = int(input("Profundidad de búsqueda (default 3): ") or "3")
         enfrentar_ia_vs_ia(partidas, profundidad)
     elif opcion == '3':
@@ -231,8 +263,7 @@ def menu():
         return
     else:
         print("Opción inválida")
-    
-    # Volver al menú
+
     input("\nPresiona Enter para continuar...")
     menu()
 
