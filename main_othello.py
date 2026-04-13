@@ -5,7 +5,7 @@ Usa OthelloAgente que hereda de AgenteJugador.
 """
 
 import os
-from Othello import Othello, OthelloAgente, OthelloEvaluacion, OthelloGenetico
+from Othello import Othello, OthelloAgente, OthelloEvaluacion, OthelloGenetico, comparar_agentes
 
 ARCHIVO_PESOS = 'mejores_pesos_othello.json'
 
@@ -24,7 +24,6 @@ def jugar_contra_ia():
     print("Formato de jugada: fila columna  (ej: 2 3)")
     print("=" * 50)
 
-    # Intentar cargar pesos optimizados si existen
     pesos = OthelloEvaluacion.PESOS_DEFECTO
     if os.path.exists(ARCHIVO_PESOS):
         usar_opt = input("Se encontraron pesos optimizados. ¿Usarlos? (s/n): ").lower() == 's'
@@ -34,7 +33,6 @@ def jugar_contra_ia():
     else:
         print("(No se encontraron pesos optimizados, usando pesos manuales)")
 
-    # Crear agente usando la nueva arquitectura
     agente_ia = OthelloAgente(profundidad=profundidad, pesos=pesos, jugador='N')
 
     while not juego.es_terminal():
@@ -98,7 +96,6 @@ def enfrentar_ia_vs_ia(partidas=10, profundidad=3):
     for i in range(partidas):
         juego = Othello()
 
-        # Alternar colores para evitar sesgo
         if i % 2 == 0:
             agente_manual   = OthelloAgente(profundidad=profundidad,
                                             pesos=OthelloEvaluacion.PESOS_DEFECTO, jugador='N')
@@ -173,13 +170,9 @@ def ejecutar_algoritmo_genetico():
 
     mejores_pesos, historial_mejor, historial_promedio = ag.evolucionar(verbose=True)
 
-    # Guardar pesos (Fase 3 - rúbrica)
     ag.guardar_pesos(mejores_pesos, ARCHIVO_PESOS)
-
-    # Graficar convergencia (Fase 3 - rúbrica)
     ag.graficar_convergencia('convergencia_othello.png')
 
-    # Prueba final
     print("\n🧪 Prueba final: pesos AG vs pesos manuales (20 partidas)...")
     victorias = 0
     partidas_test = 20
@@ -253,7 +246,7 @@ def menu():
     if opcion == '1':
         jugar_contra_ia()
     elif opcion == '2':
-        partidas   = int(input("Número de partidas (default 10): ") or "10")
+        partidas = int(input("Número de partidas (default 10): ") or "10")
         profundidad = int(input("Profundidad de búsqueda (default 3): ") or "3")
         enfrentar_ia_vs_ia(partidas, profundidad)
     elif opcion == '3':
