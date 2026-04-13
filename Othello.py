@@ -1,11 +1,8 @@
-"""
-Othello (Reversi) - Implementación completa
-Integrada con la arquitectura AgenteJugador
-"""
-
 import random
 import copy
 import json
+import time
+import statistics
 import matplotlib.pyplot as plt
 from collections import namedtuple
 from AgenteIA.AgenteJugador import AgenteJugador
@@ -14,7 +11,7 @@ from AgenteIA.AgenteJugador import AgenteJugador
 # PARTE 1: REGLAS DEL JUEGO
 # ============================================================================
 
-class Othello:
+class Othello():
     """Clase que contiene las reglas y el estado del juego Othello"""
 
     DIRECCIONES = [(-1, -1), (-1, 0), (-1, 1),
@@ -23,7 +20,7 @@ class Othello:
 
     def __init__(self):
         self.tablero = self._crear_tablero_inicial()
-        self.jugador_actual = 'N'   # 'N' = negras (MAX), 'B' = blancas (MIN)
+        self.jugador_actual = 'N'
         self.ultimo_movimiento = None
 
     def _crear_tablero_inicial(self):
@@ -129,32 +126,37 @@ class Othello:
         blancas = sum(1 for i in range(8) for j in range(8) if self.tablero[i][j] == 'B')
         return negras, blancas
 
+    # =====================================================================
+    # INTERFAZ TIPO "JUEGO" (REQUERIDA POR LA CONSIGNA)
+    # =====================================================================
+
+    @staticmethod
+    def estado_inicial():
+        return Othello()
+
+    def jugadas_legales(self, estado=None, jugador=None):
+        juego = estado if estado is not None else self
+        return juego.obtener_movimientos_legales(jugador)
+
+    def aplicar_jugada(self, estado, jugada, jugador):
+        nuevo = estado.copiar()
+        nuevo.aplicar_movimiento(jugada[0], jugada[1], jugador)
+        return nuevo
+
+    def es_estado_terminal(self, estado):
+        return estado.es_terminal()
+
+    def resultado_estado(self, estado):
+        return estado.obtener_resultado()
+
 
 # ============================================================================
 # PARTE 2: FUNCIÓN DE EVALUACIÓN CON PESOS
 # ============================================================================
 
 class OthelloEvaluacion:
-    """
-    Función de evaluación lineal: E(s) = w1*f1 + w2*f2 + w3*f3 + w4*f4
-    f1: Diferencia de fichas
-    f2: Movilidad
-    f3: Control de esquinas
-    f4: Paridad
-    """
 
     PESOS_DEFECTO = [1.0, 0.5, 2.0, 0.3]
-
-    TABLA_POSICIONES = [
-        [100, -20, 10, 5, 5, 10, -20, 100],
-        [-20, -30, -2, -2, -2, -2, -30, -20],
-        [10,  -2,  1,  1,  1,  1,  -2,  10],
-        [5,   -2,  1,  1,  1,  1,  -2,   5],
-        [5,   -2,  1,  1,  1,  1,  -2,   5],
-        [10,  -2,  1,  1,  1,  1,  -2,  10],
-        [-20, -30, -2, -2, -2, -2, -30, -20],
-        [100, -20, 10, 5, 5, 10, -20, 100]
-    ]
 
     def __init__(self, pesos=None):
         self.pesos = pesos if pesos is not None else self.PESOS_DEFECTO.copy()
@@ -201,36 +203,42 @@ class OthelloEvaluacion:
         f3 = self.control_esquinas(juego, jugador_max)
         f4 = self.paridad(juego, jugador_max)
 
-        return sum(p * c for p, c in zip(self.pesos, [f1, f2, f3, f4]))
+        features = {
+            "fichas": f1,
+            "movilidad": f2,
+            "esquinas": f3,
+            "paridad": f4
+        }
+
+        valores = list(features.values())
+        return sum(p * v for p, v in zip(self.pesos, valores))
 
 
 # ============================================================================
-# PARTE 3: AGENTE OTHELLO — hereda de AgenteJugador
+# PARTE 3: AGENTE OTHELLO CON MINIMAX PROPIO Y MÉTRICAS REALES
 # ============================================================================
 
-# Namedtuple compatible con la interfaz de AgenteJugador
 ElEstadoOthello = namedtuple('ElEstadoOthello', 'jugador, tablero, movidas')
 
 
 class OthelloAgente(AgenteJugador):
     """
-    Agente Othello que hereda de AgenteJugador.
-    Implementa jugadas(), getResultado(), get_utilidad() y FunEval()
-    para conectarse al minimax con poda alfa-beta de la clase base.
+    Agente Othello con minimax propio y poda alfa-beta.
+    Implementa métricas REALES de nodos expandidos y podados.
     """
 
     def __init__(self, profundidad=4, pesos=None, jugador='N'):
         AgenteJugador.__init__(self)
-        self.profundidad_maxima = profundidad   # usa el atributo de AgenteJugador
+        self.profundidad_maxima = profundidad
         self.evaluacion = OthelloEvaluacion(pesos)
-        self.jugador = jugador                  # 'N' o 'B'
-
-    # ------------------------------------------------------------------
-    # Conversiones entre Othello <-> ElEstadoOthello
-    # ------------------------------------------------------------------
+        self.jugador = jugador
+        
+        self.nodos_expandidos = 0
+        self.nodos_podados = 0
+        self.tiempo_ultima_jugada = 0
+        self.profundidad_real = 0
 
     def _juego_a_estado(self, juego: Othello) -> ElEstadoOthello:
-        """Convierte un objeto Othello al namedtuple que usa AgenteJugador."""
         movidas = juego.obtener_movimientos_legales(juego.jugador_actual)
         return ElEstadoOthello(
             jugador=juego.jugador_actual,
@@ -239,72 +247,141 @@ class OthelloAgente(AgenteJugador):
         )
 
     def _estado_a_juego(self, estado: ElEstadoOthello) -> Othello:
-        """Convierte un ElEstadoOthello de vuelta a un objeto Othello."""
         juego = Othello()
         juego.tablero = copy.deepcopy(estado.tablero)
         juego.jugador_actual = estado.jugador
         return juego
 
-    # ------------------------------------------------------------------
-    # Métodos abstractos requeridos por AgenteJugador
-    # ------------------------------------------------------------------
+    def _es_terminal(self, estado: ElEstadoOthello) -> bool:
+        juego = self._estado_a_juego(estado)
+        return juego.es_terminal()
 
-    def jugadas(self, estado: ElEstadoOthello):
-        """Retorna la lista de movimientos legales para el estado actual."""
+    def _obtener_utilidad(self, estado: ElEstadoOthello) -> float:
+        juego = self._estado_a_juego(estado)
+        resultado = juego.obtener_resultado()
+        return resultado if self.jugador == 'N' else -resultado
+
+    def _obtener_movimientos(self, estado: ElEstadoOthello):
         juego = self._estado_a_juego(estado)
         return juego.obtener_movimientos_legales(estado.jugador)
 
-    def getResultado(self, estado: ElEstadoOthello, movimiento) -> ElEstadoOthello:
-        """Aplica un movimiento y retorna el nuevo estado."""
+    def _aplicar_movimiento(self, estado: ElEstadoOthello, movimiento):
         juego = self._estado_a_juego(estado)
         juego.aplicar_movimiento(movimiento[0], movimiento[1], estado.jugador)
         return self._juego_a_estado(juego)
 
+    def _minimax_alfa_beta(self, estado: ElEstadoOthello, profundidad, alfa, beta, es_max):
+        self.nodos_expandidos += 1
+
+        if profundidad == 0 or self._es_terminal(estado):
+            return self.FunEval(estado), None
+
+        movimientos = self._obtener_movimientos(estado)
+        
+        if not movimientos:
+            juego = self._estado_a_juego(estado)
+            oponente = 'B' if estado.jugador == 'N' else 'N'
+            nuevo_estado = self._juego_a_estado(juego)
+            nuevo_estado = ElEstadoOthello(
+                jugador=oponente,
+                tablero=nuevo_estado.tablero,
+                movidas=[]
+            )
+            return self._minimax_alfa_beta(nuevo_estado, profundidad - 1, alfa, beta, not es_max)[0], None
+
+        mejor_movimiento = movimientos[0]
+
+        if es_max:
+            valor = float('-inf')
+            for mov in movimientos:
+                nuevo_estado = self._aplicar_movimiento(estado, mov)
+                valor_hijo, _ = self._minimax_alfa_beta(nuevo_estado, profundidad - 1, alfa, beta, False)
+                
+                if valor_hijo > valor:
+                    valor = valor_hijo
+                    mejor_movimiento = mov
+                
+                alfa = max(alfa, valor)
+                if alfa >= beta:
+                    self.nodos_podados += len(movimientos) - (movimientos.index(mov) + 1)
+                    break
+            return valor, mejor_movimiento
+        else:
+            valor = float('inf')
+            for mov in movimientos:
+                nuevo_estado = self._aplicar_movimiento(estado, mov)
+                valor_hijo, _ = self._minimax_alfa_beta(nuevo_estado, profundidad - 1, alfa, beta, True)
+                
+                if valor_hijo < valor:
+                    valor = valor_hijo
+                    mejor_movimiento = mov
+                
+                beta = min(beta, valor)
+                if alfa >= beta:
+                    self.nodos_podados += len(movimientos) - (movimientos.index(mov) + 1)
+                    break
+            return valor, mejor_movimiento
+
+    def jugadas(self, estado: ElEstadoOthello):
+        return self._obtener_movimientos(estado)
+
+    def getResultado(self, estado: ElEstadoOthello, movimiento) -> ElEstadoOthello:
+        return self._aplicar_movimiento(estado, movimiento)
+
     def get_utilidad(self, estado: ElEstadoOthello, jugador):
-        """Retorna la utilidad del estado terminal."""
-        juego = self._estado_a_juego(estado)
-        resultado = juego.obtener_resultado()
-        # Convertir resultado global al punto de vista del jugador MAX
-        return resultado if self.jugador == 'N' else -resultado
+        return self._obtener_utilidad(estado)
 
     def FunEval(self, estado: ElEstadoOthello):
-        """
-        Función de evaluación heurística — sobreescribe la de AgenteJugador.
-        Usa OthelloEvaluacion con los pesos del agente.
-        """
         juego = self._estado_a_juego(estado)
         return self.evaluacion.evaluar(juego, self.jugador)
 
-    # ------------------------------------------------------------------
-    # Interfaz pública (compatible con el código anterior)
-    # ------------------------------------------------------------------
-
     def seleccionar_movimiento(self, juego: Othello):
-        """
-        Dado un objeto Othello, retorna el mejor movimiento (fila, col).
-        Delega en podaAlphaBetaFunEval de AgenteJugador.
-        """
         estado = self._juego_a_estado(juego)
-        self.estado = estado
-        movimiento = self.podaAlphaBetaFunEval(estado)
+
+        self.nodos_expandidos = 0
+        self.nodos_podados = 0
+
+        inicio = time.time()
+
+        _, movimiento = self._minimax_alfa_beta(
+            estado, 
+            self.profundidad_maxima, 
+            float('-inf'), 
+            float('inf'), 
+            True
+        )
+
+        fin = time.time()
+        self.tiempo_ultima_jugada = fin - inicio
+        self.profundidad_real = self.profundidad_maxima
+
         return movimiento
+    
+    def obtener_metricas(self):
+        return {
+            "nodos_expandidos": self.nodos_expandidos,
+            "nodos_podados": self.nodos_podados,
+            "tiempo": self.tiempo_ultima_jugada,
+            "profundidad": self.profundidad_real
+        }
 
 
 # ============================================================================
-# PARTE 4: ALGORITMO GENÉTICO PARA OPTIMIZAR PESOS
+# PARTE 4: ALGORITMO GENÉTICO
 # ============================================================================
 
 class OthelloGenetico:
-    """Algoritmo Genético para optimizar los pesos de la función de evaluación."""
-
     def __init__(self, tam_poblacion=30, generaciones=20, profundidad=3, partidas_por_fitness=20):
+        random.seed(42)
         self.tam_poblacion = tam_poblacion
         self.generaciones = generaciones
         self.profundidad = profundidad
-        self.partidas_por_fitness = partidas_por_fitness
+        self.partidas_por_fitness = max(20, partidas_por_fitness)
         self.poblacion = []
         self.mejor_historial = []
         self.promedio_historial = []
+        self.mejor_individuo_global = None
+        self.mejor_fitness_global = -1
 
     def _crear_individuo(self):
         return [random.uniform(0, 2) for _ in range(4)]
@@ -337,23 +414,18 @@ class OthelloGenetico:
             return -1
 
     def _calcular_fitness(self, individuo):
-        """
-        Fitness = tasa de victorias contra el agente base.
-        Se alterna el color para evitar sesgo de salida.
-        """
         pesos = self._normalizar_pesos(individuo)
         victorias = 0
 
         for i in range(self.partidas_por_fitness):
-            # Alternar color cada partida
             if i % 2 == 0:
                 agente_prueba = OthelloAgente(profundidad=self.profundidad, pesos=pesos, jugador='N')
-                agente_base   = OthelloAgente(profundidad=self.profundidad,
-                                              pesos=OthelloEvaluacion.PESOS_DEFECTO, jugador='B')
+                agente_base = OthelloAgente(profundidad=self.profundidad,
+                                           pesos=OthelloEvaluacion.PESOS_DEFECTO, jugador='B')
             else:
                 agente_prueba = OthelloAgente(profundidad=self.profundidad, pesos=pesos, jugador='B')
-                agente_base   = OthelloAgente(profundidad=self.profundidad,
-                                              pesos=OthelloEvaluacion.PESOS_DEFECTO, jugador='N')
+                agente_base = OthelloAgente(profundidad=self.profundidad,
+                                           pesos=OthelloEvaluacion.PESOS_DEFECTO, jugador='N')
 
             resultado = self._jugar_partida(agente_prueba, agente_base)
             if resultado == 1:
@@ -397,6 +469,10 @@ class OthelloGenetico:
             mejor_ind = self.poblacion[fitnesses.index(mejor_fitness)]
             promedio_fitness = sum(fitnesses) / len(fitnesses)
 
+            if mejor_fitness > self.mejor_fitness_global:
+                self.mejor_fitness_global = mejor_fitness
+                self.mejor_individuo_global = mejor_ind.copy()
+
             self.mejor_historial.append(mejor_fitness)
             self.promedio_historial.append(promedio_fitness)
 
@@ -405,7 +481,7 @@ class OthelloGenetico:
                       f"Promedio: {promedio_fitness:.4f} | "
                       f"Pesos: {[round(w, 2) for w in mejor_ind]}")
 
-            nueva_poblacion = [mejor_ind]   # elitismo
+            nueva_poblacion = [mejor_ind]
             while len(nueva_poblacion) < self.tam_poblacion:
                 padre1 = self._seleccion_torneo(fitnesses)
                 padre2 = self._seleccion_torneo(fitnesses)
@@ -415,40 +491,32 @@ class OthelloGenetico:
 
             self.poblacion = nueva_poblacion
 
-        fitnesses_final = [self._calcular_fitness(ind) for ind in self.poblacion]
-        mejor_idx = fitnesses_final.index(max(fitnesses_final))
-        mejores_pesos = self._normalizar_pesos(self.poblacion[mejor_idx])
+        mejores_pesos = self._normalizar_pesos(self.mejor_individuo_global)
 
         if verbose:
-            print(f"\n✅ Mejores pesos: {[round(w, 2) for w in mejores_pesos]}")
+            print(f"\n✅ Mejores pesos globales: {[round(w, 2) for w in mejores_pesos]}")
+            print(f"   Fitness: {self.mejor_fitness_global:.4f}")
 
         return mejores_pesos, self.mejor_historial, self.promedio_historial
 
-    # ------------------------------------------------------------------
-    # Guardar pesos y graficar convergencia (Fase 3 - rúbrica)
-    # ------------------------------------------------------------------
-
     def guardar_pesos(self, pesos, archivo='mejores_pesos_othello.json'):
-        """Guarda los mejores pesos en un archivo JSON."""
         with open(archivo, 'w') as f:
             json.dump({'pesos': pesos}, f, indent=2)
         print(f"💾 Pesos guardados en '{archivo}'")
 
     def cargar_pesos(self, archivo='mejores_pesos_othello.json'):
-        """Carga pesos desde un archivo JSON."""
         with open(archivo, 'r') as f:
             data = json.load(f)
         print(f"📂 Pesos cargados desde '{archivo}': {data['pesos']}")
         return data['pesos']
 
     def graficar_convergencia(self, archivo='convergencia_othello.png'):
-        """Genera y guarda la gráfica de convergencia del AG (Fase 3 - rúbrica)."""
         if not self.mejor_historial:
             print("No hay datos de evolución. Ejecuta evolucionar() primero.")
             return
 
         plt.figure(figsize=(10, 5))
-        plt.plot(self.mejor_historial,    label='Mejor fitness',   color='blue',  linewidth=2)
+        plt.plot(self.mejor_historial, label='Mejor fitness', color='blue', linewidth=2)
         plt.plot(self.promedio_historial, label='Fitness promedio', color='orange', linewidth=2, linestyle='--')
         plt.xlabel('Generación')
         plt.ylabel('Fitness (tasa de victorias)')
@@ -459,3 +527,74 @@ class OthelloGenetico:
         plt.savefig(archivo)
         plt.show()
         print(f"📊 Gráfica guardada en '{archivo}'")
+
+
+# ============================================================================
+# PARTE 5: FUNCIONES DE EXPERIMENTACIÓN
+# ============================================================================
+
+def jugar_partidas(agente1, agente2, n=20):
+    resultados = []
+    metricas_agente1 = []
+
+    for i in range(n):
+        juego = Othello()
+        
+        if i % 2 == 0:
+            juego.jugador_actual = agente1.jugador
+        else:
+            juego.jugador_actual = agente2.jugador
+
+        while not juego.es_terminal():
+            jugador_actual = juego.jugador_actual
+            agente = agente1 if jugador_actual == agente1.jugador else agente2
+            mov = agente.seleccionar_movimiento(juego)
+            
+            if mov:
+                juego.aplicar_movimiento(mov[0], mov[1])
+            else:
+                juego.jugador_actual = 'B' if juego.jugador_actual == 'N' else 'N'
+
+        resultados.append(juego.obtener_resultado())
+        
+        if hasattr(agente1, 'obtener_metricas'):
+            metricas_agente1.append(agente1.obtener_metricas())
+
+    return resultados, metricas_agente1
+
+
+def comparar_agentes(agente1, agente2, n_partidas=20):
+    print(f"\n{'='*60}")
+    print(f"Comparando: {agente1.__class__.__name__} (prof={agente1.profundidad_maxima}) vs "
+          f"{agente2.__class__.__name__} (prof={agente2.profundidad_maxima})")
+    print(f"Partidas: {n_partidas}")
+    print(f"{'='*60}")
+
+    resultados, metricas = jugar_partidas(agente1, agente2, n_partidas)
+    
+    victorias = sum(1 for r in resultados if r == 1)
+    derrotas = sum(1 for r in resultados if r == -1)
+    empates = sum(1 for r in resultados if r == 0)
+    
+    print(f"\n📊 Resultados:")
+    print(f"   Victorias: {victorias} ({victorias/n_partidas*100:.1f}%)")
+    print(f"   Derrotas:  {derrotas} ({derrotas/n_partidas*100:.1f}%)")
+    print(f"   Empates:   {empates} ({empates/n_partidas*100:.1f}%)")
+    print(f"   Tasa:      {victorias/n_partidas:.3f}")
+    
+    if metricas:
+        tiempos = [m['tiempo'] for m in metricas if m['tiempo'] > 0]
+        nodos_exp = [m['nodos_expandidos'] for m in metricas]
+        nodos_pod = [m['nodos_podados'] for m in metricas]
+        
+        print(f"\n⏱️ Tiempos del agente1:")
+        print(f"   Media: {statistics.mean(tiempos):.4f}s" if tiempos else "   No disponible")
+        print(f"   Desv:  {statistics.stdev(tiempos):.4f}s" if len(tiempos) > 1 else "   No disponible")
+        print(f"   Min:   {min(tiempos):.4f}s" if tiempos else "   No disponible")
+        print(f"   Max:   {max(tiempos):.4f}s" if tiempos else "   No disponible")
+        
+        print(f"\n🌳 Nodos expandidos (media): {statistics.mean(nodos_exp):.0f}")
+        print(f"✂️ Nodos podados (media):     {statistics.mean(nodos_pod):.0f}")
+        print(f"📊 Tasa de poda:              {statistics.mean(nodos_pod)/max(1, statistics.mean(nodos_exp))*100:.1f}%")
+    
+    return resultados, metricas
