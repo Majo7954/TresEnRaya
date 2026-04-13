@@ -203,9 +203,9 @@ Dependiendo de la ejecución, se pueden generar:
 - Optimizar la búsqueda con técnicas adicionales
 - Explorar enfoques de aprendizaje automático
 
-## Autora
+## Autores
 
 María José Murillo Mendoza
+Laura Camacho Lipa
+Andres Revollo Almendras
 
-Proyecto académico de Inteligencia Artificial
-```
