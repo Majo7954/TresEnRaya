@@ -16,7 +16,7 @@ ARCHIVO_PESOS = 'mejores_pesos_othello.json'
 
 def jugar_contra_ia():
     juego = Othello()
-    profundidad = 3
+    profundidad = 4
 
     print("=" * 50)
     print("OTHELLO — Humano vs IA")
@@ -76,7 +76,7 @@ def jugar_contra_ia():
 # MODO 2: IA vs IA
 # ============================================================================
 
-def enfrentar_ia_vs_ia(partidas=10, profundidad=3):
+def enfrentar_ia_vs_ia(partidas=10, profundidad=4):
     print(f"\n{'='*50}")
     print(f"IA vs IA — {partidas} partidas (profundidad={profundidad})")
     print(f"{'='*50}")
@@ -149,10 +149,10 @@ def ejecutar_algoritmo_genetico():
     print("ALGORITMO GENÉTICO — optimizar pesos de Othello")
     print("=" * 50)
 
-    tam_poblacion      = 20
-    generaciones       = 15
+    tam_poblacion      = 10
+    generaciones       = 8
     profundidad        = 2
-    partidas_por_fitness = 10
+    partidas_por_fitness = 8
 
     print(f"\nParámetros:")
     print(f"  Población           : {tam_poblacion}")
@@ -247,7 +247,7 @@ def menu():
         jugar_contra_ia()
     elif opcion == '2':
         partidas = int(input("Número de partidas (default 10): ") or "10")
-        profundidad = int(input("Profundidad de búsqueda (default 3): ") or "3")
+        profundidad = int(input("Profundidad de búsqueda (default 4): ") or "4")
         enfrentar_ia_vs_ia(partidas, profundidad)
     elif opcion == '3':
         ejecutar_algoritmo_genetico()
